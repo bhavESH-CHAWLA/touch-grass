@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: touch-grass-planner
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: LLM_MODEL
+        value: qwen2.5:1.5b
+      # Option A: point at any OpenAI-compatible host you run (set in the dashboard)
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      # Option B: the private Ollama service below
+      # - key: LLM_HOSTPORT
+      #   fromService:
+      #     type: pserv
+      #     name: ollama
+      #     property: hostport
+
+  # Option B: host the open-weight model on Render itself (paid instance + disk needed).
+  # - type: pserv
+  #   name: ollama
+  #   runtime: docker
+  #   dockerfilePath: ./ollama/Dockerfile
+  #   dockerContext: ./ollama
+  #   plan: standard
+  #   envVars:
+  #     - key: MODEL
+  #       value: qwen2.5:1.5b
+  #   disk:
+  #     name: ollama-models
+  #     mountPath: /root/.ollama
+  #     sizeGB: 5
