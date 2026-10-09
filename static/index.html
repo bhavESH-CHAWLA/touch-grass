@@ -196,7 +196,7 @@ function render(d){
   $("#tip").textContent = n.tip || "";
   $("#dir").href = d.directions_url;
   const w = $("#warnings"); w.replaceChildren(); d.warnings.forEach(t => w.append(el("p","warn",t)));
-  $("#credit").textContent = (d.narrator === "template" ? "Text: built-in template. " : "Text written by " + d.narrator + ", an open-weight model. ")
+  $("#credit").textContent = (d.narrator === "template" ? "Text: built-in template. " : "Text written by " + d.narrator + ". ")
     + "Map data from OpenStreetMap contributors. Weather from Open-Meteo.";
   drawMap(d);
   $("#result").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });

@@ -260,8 +260,8 @@ def template_narration(loop: dict, weather: dict | None, minutes: int) -> dict:
 
 
 async def llm_narration(client: httpx.AsyncClient, ctx: dict) -> dict | None:
+    backboard_key = os.getenv("BACKBOARD_API_KEY")
     model = os.getenv("LLM_MODEL", "qwen2.5:3b")
-    headers = {"Authorization": f"Bearer {os.getenv('LLM_API_KEY', 'ollama')}"}
     system = (
         "You write short, warm walking plans for university students on a break. "
         "Use ONLY the stops, distances and weather given. Never invent places. "
@@ -270,18 +270,37 @@ async def llm_narration(client: httpx.AsyncClient, ctx: dict) -> dict | None:
         "notice (array of exactly 5 short things to look, listen or feel for, specific to the stop types and weather), "
         "tip (one sentence)."
     )
-    body = {
-        "model": model, "temperature": 0.7,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(ctx)}],
-    }
-    for use_json_mode in (True, False):
-        payload = {**body, **({"response_format": {"type": "json_object"}} if use_json_mode else {})}
+    if backboard_key:
+        endpoint = "https://app.backboard.io/api/threads/messages"
+        headers = {"X-API-Key": backboard_key}
+        payload = {
+            "content": json.dumps(ctx),
+            "system_prompt": system,
+            "llm_provider": os.getenv("BACKBOARD_LLM_PROVIDER", "openai"),
+            "model_name": os.getenv("BACKBOARD_LLM_MODEL", "gpt-4o"),
+            "json_output": True,
+        }
+        requests = ((payload, True),)
+    else:
+        endpoint = f"{llm_base()}/chat/completions"
+        headers = {"Authorization": f"Bearer {os.getenv('LLM_API_KEY', 'ollama')}"}
+        body = {
+            "model": model, "temperature": 0.7,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(ctx)}],
+        }
+        requests = tuple(
+            ({**body, **({"response_format": {"type": "json_object"}} if use_json_mode else {})}, use_json_mode)
+            for use_json_mode in (True, False)
+        )
+
+    for payload, use_json_mode in requests:
         try:
-            r = await client.post(f"{llm_base()}/chat/completions", json=payload, headers=headers, timeout=60)
+            r = await client.post(endpoint, json=payload, headers=headers, timeout=60)
             if r.status_code >= 400 and use_json_mode:
                 continue
             r.raise_for_status()
-            text = r.json()["choices"][0]["message"]["content"]
+            response = r.json()
+            text = response["content"] if backboard_key else response["choices"][0]["message"]["content"]
             data = json.loads(text[text.index("{"): text.rindex("}") + 1])
             n = len(ctx["stops"])
             notes = [str(x) for x in data.get("stop_notes", [])][:n]
@@ -328,7 +347,12 @@ async def build_plan(lat: float, lon: float, minutes: int) -> dict:
         }
         narration = await llm_narration(client, ctx)
 
-    narrator = os.getenv("LLM_MODEL", "qwen2.5:3b")
+    narrator = (
+        f"Backboard ({os.getenv('BACKBOARD_LLM_PROVIDER', 'openai')}/"
+        f"{os.getenv('BACKBOARD_LLM_MODEL', 'gpt-4o')})"
+        if os.getenv("BACKBOARD_API_KEY")
+        else os.getenv("LLM_MODEL", "qwen2.5:3b")
+    )
     if narration is None:
         narration = template_narration(loop, weather, minutes)
         narrator = "template"
